@@ -1,0 +1,93 @@
+﻿using Assets.Scripts.Enemy;
+using Assets.Scripts.Runtime;
+using JetBrains.Annotations;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Assets.Scripts.Turret.Weapon.Projectile
+{
+    public class TurretProjectileWeapon : ITurretWeapon
+    {
+        private TurretProjectileWeaponAsset m_Asset;
+        private TurretView m_View;
+
+        [CanBeNull]
+        private EnemyData m_ClosesEnemyData;
+
+        private List<IProjectile> m_Projectiles = new List<IProjectile>();
+
+        private float m_TimeBetweenShots;
+        private float m_MaxDistance;
+
+        private float m_LastShotTime = 0.0f;
+
+        public TurretProjectileWeapon(TurretProjectileWeaponAsset asset, TurretView view)
+        {
+            m_Asset = asset;
+            m_View = view;
+            m_TimeBetweenShots = 1.0f / m_Asset.RateOfFire;
+            m_MaxDistance = m_Asset.MaxDistance;
+        }
+
+        public void TickShoot()
+        {
+            TickWeapon();
+            TickTower();
+            TickProjectile();
+        }
+
+        private void TickWeapon()
+        {
+            float passedTime = Time.time - m_LastShotTime;
+            if (passedTime < m_TimeBetweenShots)
+            {
+                return;
+            }
+
+            m_ClosesEnemyData =
+                Game.Player.EnemySearch.GetClosestEnemy(m_View.transform.position, m_MaxDistance);
+
+            if (m_ClosesEnemyData == null)
+            {
+                return;
+            }
+
+            TickTower();
+
+            Shoot(m_ClosesEnemyData);
+            m_LastShotTime = Time.time;
+        }
+
+        private void TickTower()
+        {
+            if(m_ClosesEnemyData != null && !m_ClosesEnemyData.IsDead)
+            {
+                m_View.TowerLookAt(m_ClosesEnemyData.View.transform.position);
+            }
+        }
+
+        private void TickProjectile()
+        {
+            for (int i = 0; i < m_Projectiles.Count; i++)
+            {
+                IProjectile projectile = m_Projectiles[i];
+                projectile.TickApproaching();
+                
+                if(projectile.DidHit())
+                {
+                    projectile.DestroyProjectile();
+                    m_Projectiles[i] = null;
+                }
+            }
+
+            m_Projectiles.RemoveAll(projectile => projectile == null);
+        }
+
+        private void Shoot(EnemyData enemyData)
+        {
+            m_Projectiles.Add(m_Asset.ProjectileAsset.CreateProjectile(m_View.ProjectileOrigin.position,
+                                                      m_View.ProjectileOrigin.forward,
+                                                      enemyData));
+        }
+    }
+}
